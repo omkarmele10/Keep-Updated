@@ -40,3 +40,41 @@
 .theme-toggle-icon-auto {
   font-size: 1.5rem;
 }
+
+.news-card {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.news-card-image {
+  height: 180px;
+  object-fit: cover;
+}
+
+.news-card-source {
+  max-width: calc(100% - 1rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.news-card-title,
+.news-card-description {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.news-card-title {
+  min-height: 3rem;
+  -webkit-line-clamp: 2;
+}
+
+.news-card-description {
+  min-height: 4.5rem;
+  -webkit-line-clamp: 3;
+}
+
+.news-card-meta {
+  min-height: 2.5rem;
+}

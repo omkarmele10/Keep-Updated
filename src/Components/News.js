@@ -12,7 +12,7 @@ const News = ({
 }) => {
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [nextPage, setNextPage] = useState(null);
   const [totalResults, setTotalResults] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
   const [hasMore, setHasMore] = useState(true);
@@ -22,60 +22,85 @@ const News = ({
   };
 
   const updateNews = useCallback(
-    async (pageToLoad = 1, reset = false) => {
+    async (pageToLoad = null, reset = false) => {
       setLoading(true);
       setErrorMessage("");
       setProgress(10);
 
       try {
-        let url = `https://newsapi.org/v2/top-headlines?country=${country}&category=${category}&apiKey=${process.env.REACT_APP_NEWS_API_KEY1}&page=${pageToLoad}&pageSize=${pageSize}`;
-        let data = await fetch(url);
-
-        if (data.status === 429) {
-          url = `https://newsapi.org/v2/top-headlines?country=${country}&category=${category}&apiKey=${process.env.REACT_APP_NEWS_API_KEY2}&page=${pageToLoad}&pageSize=${pageSize}`;
-          data = await fetch(url);
+        const apiKey = process.env.REACT_APP_NEWSDATA_API_KEY;
+        if (!apiKey) {
+          setLoading(false);
+          setHasMore(false);
+          setErrorMessage(
+            "Add your NewsData.io API key to REACT_APP_NEWSDATA_API_KEY in .env, then restart the app."
+          );
+          setProgress(100);
+          return;
         }
 
+        const params = new URLSearchParams({
+          apikey: apiKey,
+          country,
+          category: category === "general" ? "top" : category,
+          language: "en",
+          size: String(pageSize),
+        });
+        if (pageToLoad) {
+          params.set("page", pageToLoad);
+        }
+
+        const response = await fetch(
+          `https://newsdata.io/api/1/latest?${params.toString()}`
+        );
         setProgress(50);
-        const parsedData = await data.json();
+        const parsedData = await response.json();
 
-        if (data.status === 429) {
+        if (!response.ok || parsedData.status === "error") {
           setLoading(false);
           setHasMore(false);
           setErrorMessage(
-            "Free API limit reached for today. Please try again after 24 hours."
+            response.status === 429
+              ? "NewsData.io rate limit reached. Please try again later."
+              : parsedData.message ||
+                parsedData.results?.[0]?.message ||
+                "Something went wrong while loading the news."
           );
           setProgress(100);
           return;
         }
 
-        if (!data.ok) {
-          setLoading(false);
-          setHasMore(false);
-          setErrorMessage(
-            parsedData.message || "Something went wrong while loading the news."
-          );
-          setProgress(100);
-          return;
-        }
-
-        const incomingArticles = parsedData.articles || [];
-        const nextTotalResults = parsedData.totalResults || 0;
+        const incomingArticles = Array.isArray(parsedData.results)
+          ? parsedData.results
+          : [];
 
         setArticles((prev) => {
           const base = reset ? [] : prev;
           const merged = base.concat(incomingArticles);
 
-          return merged.filter((article, index, self) => {
-            if (!article.url) {
+          const seenArticles = new Set();
+          return merged.filter((article) => {
+            const normalizedTitle = article.title
+              ?.trim()
+              .toLowerCase()
+              .replace(/\s+/g, " ");
+            const uniqueKey = normalizedTitle || article.url;
+
+            if (!uniqueKey) {
               return true;
             }
-            return index === self.findIndex((item) => item.url === article.url);
+            if (seenArticles.has(uniqueKey)) {
+              return false;
+            }
+
+            seenArticles.add(uniqueKey);
+            return true;
           });
         });
 
-        setTotalResults(nextTotalResults);
-        setHasMore(pageToLoad * pageSize < nextTotalResults);
+        setTotalResults(parsedData.totalResults ?? incomingArticles.length);
+        setNextPage(parsedData.nextPage || null);
+        setHasMore(Boolean(parsedData.nextPage));
         setLoading(false);
         setProgress(100);
       } catch (error) {
@@ -95,16 +120,16 @@ const News = ({
   }, [category]);
 
   useEffect(() => {
-    setPage(1);
     setArticles([]);
+    setNextPage(null);
     setHasMore(true);
-    updateNews(1, true);
+    updateNews(null, true);
   }, [country, category, pageSize, updateNews]);
 
   const fetchMoreData = async () => {
-    const nextPage = page + 1;
-    setPage(nextPage);
-    await updateNews(nextPage, false);
+    if (nextPage && !loading) {
+      await updateNews(nextPage, false);
+    }
   };
 
   return (
@@ -124,21 +149,27 @@ const News = ({
         loader={loading && <Sppiner />}
       >
         <div className="container">
-          <div className="row">
+          <div className="row gy-4">
             {articles.map((item, index) => (
-              <div className="col-sm-6 col-lg-4" key={item.url || `${item.title}-${index}`}>
+              <div className="col-sm-6 col-lg-4 d-flex" key={item.url || `${item.title}-${index}`}>
                 <NewsItem
-                  title={item.title ? item.title.slice(0, 40) : ""}
-                  description={item.description ? item.description.slice(0, 80) : ""}
+                  title={item.title || ""}
+                  description={item.description || ""}
                   imageUrl={
-                    item.urlToImage
-                      ? item.urlToImage
+                    item.image_url
+                      ? item.image_url
                       : "https://img.freepik.com/free-vector/global-broadcast-breaking-news-banner-with-global-map_1017-59836.jpg?semt=ais_hybrid&w=740&q=80"
                   }
                   newsUrl={item.url}
-                  author={item.author ? item.author.slice(0, 25) : ""}
-                  date={item.publishedAt}
-                  source={item.source?.name}
+                  author={
+                    Array.isArray(item.creator)
+                      ? item.creator.join(", ").slice(0, 25)
+                      : item.creator
+                        ? item.creator.slice(0, 25)
+                        : ""
+                  }
+                  date={item.pubDate}
+                  source={item.source_name}
                 />
               </div>
             ))}
