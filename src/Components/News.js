@@ -160,7 +160,7 @@ const News = ({
                       ? item.image_url
                       : "https://img.freepik.com/free-vector/global-broadcast-breaking-news-banner-with-global-map_1017-59836.jpg?semt=ais_hybrid&w=740&q=80"
                   }
-                  newsUrl={item.url}
+                  newsUrl={item.link || ""}
                   author={
                     Array.isArray(item.creator)
                       ? item.creator.join(", ").slice(0, 25)
